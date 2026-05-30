@@ -19,16 +19,28 @@ import state_db as db
 logger = logging.getLogger(__name__)
 
 
-EXCLUDE_EXACT = {
-    ".obsidian/workspace.json",
-    ".obsidian/workspace-mobile.json",
-    ".obsidian/plugins/cloudsync/data.json",
-    ".obsidian/community-plugins.json",  # 端末ごとに有効プラグインが異なる
-}
+def load_ignore_patterns(local_root: str) -> list[str]:
+    ignore_path = os.path.join(local_root, ".cloudsync_ignore")
+    if not os.path.exists(ignore_path):
+        return []
+    with open(ignore_path, encoding="utf-8") as f:
+        return [l.strip() for l in f if l.strip() and not l.startswith("#")]
 
-def should_exclude(local_root: str, path: str) -> bool:
+
+def matches_pattern(rel: str, pattern: str) -> bool:
+    if pattern.endswith("/"):
+        return rel.startswith(pattern)
+    if "*" in pattern:
+        import fnmatch
+        return fnmatch.fnmatch(rel, pattern)
+    return rel == pattern
+
+
+def should_exclude(local_root: str, path: str, patterns: list[str] | None = None) -> bool:
     rel = os.path.relpath(path, local_root).replace(os.sep, "/")
-    return rel in EXCLUDE_EXACT
+    if patterns is None:
+        patterns = load_ignore_patterns(local_root)
+    return any(matches_pattern(rel, p) for p in patterns)
 
 
 def conflict_path(local_path: str) -> str:
@@ -44,7 +56,9 @@ class SyncEngine:
         self.remote_root = remote_root
         self._debounce_timers: dict[str, threading.Timer] = {}
         self._lock = threading.Lock()
-        self._downloading: set[str] = set()  # ダウンロード中のパスを記録
+        self._downloading: set[str] = set()
+        self._ignore_patterns: list[str] = load_ignore_patterns(local_root)
+        logger.info(f"除外パターン ({len(self._ignore_patterns)}件): {self._ignore_patterns}")  # ダウンロード中のパスを記録
 
     # ────────────────────────────────────────────
     # ローカル → リモート
@@ -52,7 +66,7 @@ class SyncEngine:
 
     def schedule_upload(self, local_path: str, delay: float = 5.0):
         """デバウンス付きアップロード予約"""
-        if should_exclude(self.local_root, local_path):
+        if should_exclude(self.local_root, local_path, self._ignore_patterns):
             return
         # ダウンロード中のファイルはアップロードしない
         if local_path in self._downloading:
@@ -179,7 +193,7 @@ class SyncEngine:
         for root, _, files in os.walk(self.local_root):
             for f in files:
                 lp = os.path.join(root, f)
-                if should_exclude(self.local_root, lp):
+                if should_exclude(self.local_root, lp, self._ignore_patterns):
                     continue
                 rp = dc.to_remote_path(lp, self.local_root, self.remote_root).lower()
                 local_files[rp] = lp
