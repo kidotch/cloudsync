@@ -19,6 +19,13 @@ import state_db as db
 logger = logging.getLogger(__name__)
 
 
+EXCLUDE_PREFIXES = (".obsidian/",)
+
+def should_exclude(local_root: str, path: str) -> bool:
+    rel = os.path.relpath(path, local_root).replace(os.sep, "/")
+    return any(rel.startswith(p) for p in EXCLUDE_PREFIXES)
+
+
 def conflict_path(local_path: str) -> str:
     base, ext = os.path.splitext(local_path)
     ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -40,6 +47,8 @@ class SyncEngine:
 
     def schedule_upload(self, local_path: str, delay: float = 5.0):
         """デバウンス付きアップロード予約"""
+        if should_exclude(self.local_root, local_path):
+            return
         # ダウンロード中のファイルはアップロードしない
         if local_path in self._downloading:
             return
@@ -165,6 +174,8 @@ class SyncEngine:
         for root, _, files in os.walk(self.local_root):
             for f in files:
                 lp = os.path.join(root, f)
+                if should_exclude(self.local_root, lp):
+                    continue
                 rp = dc.to_remote_path(lp, self.local_root, self.remote_root).lower()
                 local_files[rp] = lp
 
