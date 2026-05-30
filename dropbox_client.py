@@ -17,7 +17,7 @@ def to_remote_path(local_path: str, local_root: str, remote_root: str) -> str:
 
 
 def to_local_path(remote_path: str, local_root: str, remote_root: str) -> str:
-    rel = remote_path[len(remote_root):].lstrip("/")
+    rel = remote_path[len(remote_root):].lstrip("/").replace("/", os.sep)
     return os.path.join(local_root, rel)
 
 
