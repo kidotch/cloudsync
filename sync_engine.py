@@ -23,6 +23,7 @@ EXCLUDE_EXACT = {
     ".obsidian/workspace.json",
     ".obsidian/workspace-mobile.json",
     ".obsidian/plugins/cloudsync/data.json",
+    ".obsidian/community-plugins.json",  # 端末ごとに有効プラグインが異なる
 }
 
 def should_exclude(local_root: str, path: str) -> bool:
