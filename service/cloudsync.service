@@ -1,0 +1,15 @@
+[Unit]
+Description=Cloud Sync Daemon (Dropbox)
+After=network-online.target
+
+[Service]
+User=kido
+EnvironmentFile=/etc/cloudsync.env
+ExecStart=/home/kido/venvs/cloudsync/bin/python /home/kido/ghq/local/cloudsync/main.py
+Restart=on-failure
+RestartSec=10
+StandardOutput=append:/home/kido/.config/cloudsync/sync.log
+StandardError=append:/home/kido/.config/cloudsync/sync.log
+
+[Install]
+WantedBy=multi-user.target
