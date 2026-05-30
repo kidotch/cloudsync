@@ -19,11 +19,15 @@ import state_db as db
 logger = logging.getLogger(__name__)
 
 
-EXCLUDE_PREFIXES = (".obsidian/",)
+EXCLUDE_EXACT = {
+    ".obsidian/workspace.json",
+    ".obsidian/workspace-mobile.json",
+    ".obsidian/plugins/cloudsync/data.json",
+}
 
 def should_exclude(local_root: str, path: str) -> bool:
     rel = os.path.relpath(path, local_root).replace(os.sep, "/")
-    return any(rel.startswith(p) for p in EXCLUDE_PREFIXES)
+    return rel in EXCLUDE_EXACT
 
 
 def conflict_path(local_path: str) -> str:
