@@ -82,6 +82,9 @@ class SyncEngine:
         with self._lock:
             self._debounce_timers.pop(local_path, None)
 
+        # 除外対象は絶対にアップロードしない（initial_sync 等あらゆる経路の防波堤）
+        if should_exclude(self.local_root, local_path, self._ignore_patterns):
+            return
         if not os.path.exists(local_path):
             return
         if os.path.isdir(local_path):
@@ -189,6 +192,19 @@ class SyncEngine:
 
         # リモートのファイルを全取得（path_lower をキーに、path_display でローカルパスを生成）
         remote_files = {m.path_lower: m for m in dc.list_remote(self.dbx, self.remote_root)}
+
+        # 新規マシンでは .cloudsync_ignore がまだローカルに無く、除外パターンが空のまま
+        # 端末固有ファイル（workspace.json 等）を上げてしまう。これを防ぐため、
+        # 何よりも先に .cloudsync_ignore を取得して除外パターンを確定させる。
+        ign_key = (self.remote_root.rstrip("/") + "/.cloudsync_ignore").lower()
+        if ign_key in remote_files:
+            meta = remote_files[ign_key]
+            lp = dc.to_local_path(meta.path_display, self.local_root, self.remote_root)
+            if not os.path.exists(lp):
+                dc.download(self.dbx, meta.path_display, lp)
+                db.upsert_file(lp, meta.path_display, db.file_hash(lp), meta.rev)
+            self._ignore_patterns = load_ignore_patterns(self.local_root)
+            logger.info("除外パターン確定 (%d件): %s", len(self._ignore_patterns), self._ignore_patterns)
 
         # ローカルのファイルを全取得
         local_files = {}
