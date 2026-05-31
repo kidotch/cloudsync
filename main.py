@@ -77,9 +77,15 @@ def remote_poll_loop(engine: SyncEngine, dbx):
         _, cursor = dc.get_changes(dbx, None, REMOTE_ROOT)
         db.set_cursor(cursor)
 
+    was_offline = False
     while True:
         try:
             has_changes = dc.wait_for_changes(dbx, cursor, timeout=POLL_INTERVAL)
+            if was_offline:
+                # 通信が復活した → オフライン中のローカル編集を回収してから差分処理
+                logger.info("再接続を検知 → ローカル再スキャン")
+                engine.rescan_local_changes()
+                was_offline = False
             if has_changes:
                 changes, cursor = dc.get_changes(dbx, cursor, REMOTE_ROOT)
                 db.set_cursor(cursor)
@@ -87,6 +93,7 @@ def remote_poll_loop(engine: SyncEngine, dbx):
                     engine.apply_remote_changes(changes)
         except Exception as e:
             logger.error("リモート監視エラー: %s", e)
+            was_offline = True  # 次に成功したら再スキャンする
             time.sleep(5)
 
 

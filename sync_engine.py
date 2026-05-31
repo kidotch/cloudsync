@@ -233,4 +233,31 @@ class SyncEngine:
                 logger.info("初回UP: %s", lp)
                 self._do_upload(lp)
 
+        # オフライン中に編集された（リモートrevは同じだが中身が変わった）ファイルを回収
+        self.rescan_local_changes()
+
         logger.info("初回同期完了")
+
+    def rescan_local_changes(self):
+        """ローカル全ファイルを走査し、DB記録とハッシュが食い違うものをアップロードする。
+
+        オフライン中の編集は watchdog のアップロードが失敗したまま再試行されないため、
+        起動時（initial_sync 末尾）と再接続時にこれを呼んで取りこぼしを回収する。
+        ハッシュ一致のものは _do_upload 内で即スキップされるので安全。
+        """
+        n = 0
+        for root, _, files in os.walk(self.local_root):
+            for f in files:
+                lp = os.path.join(root, f)
+                if should_exclude(self.local_root, lp, self._ignore_patterns):
+                    continue
+                if lp in self._downloading:
+                    continue
+                record = db.get_file(lp)
+                current_hash = db.file_hash(lp)
+                if record is None or record["local_hash"] != current_hash:
+                    logger.info("未同期の変更を回収: %s", lp)
+                    self._do_upload(lp)
+                    n += 1
+        if n:
+            logger.info("ローカル再スキャン完了: %d件をアップロード", n)
