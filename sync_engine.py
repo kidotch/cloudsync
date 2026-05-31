@@ -140,7 +140,7 @@ class SyncEngine:
 
     def apply_remote_changes(self, changes: list):
         for entry in changes:
-            local_path = dc.to_local_path(entry.path_lower, self.local_root, self.remote_root)
+            local_path = dc.to_local_path(entry.path_display, self.local_root, self.remote_root)
 
             if isinstance(entry, DeletedMetadata):
                 if os.path.exists(local_path):
@@ -166,11 +166,11 @@ class SyncEngine:
                                        dc.to_remote_path(conflict, self.local_root, self.remote_root),
                                        db.file_hash(conflict), "")
 
-                logger.info("ダウンロード: %s → %s", entry.path_lower, local_path)
+                logger.info("ダウンロード: %s → %s", entry.path_display, local_path)
                 try:
                     self._downloading.add(local_path)
-                    dc.download(self.dbx, entry.path_lower, local_path)
-                    db.upsert_file(local_path, entry.path_lower,
+                    dc.download(self.dbx, entry.path_display, local_path)
+                    db.upsert_file(local_path, entry.path_display,
                                    db.file_hash(local_path), entry.rev)
                 except Exception as e:
                     logger.error("ダウンロード失敗: %s: %s", local_path, e)
@@ -185,7 +185,7 @@ class SyncEngine:
     def initial_sync(self):
         logger.info("初回同期開始: %s ↔ %s", self.local_root, self.remote_root)
 
-        # リモートのファイルを全取得
+        # リモートのファイルを全取得（path_lower をキーに、path_display でローカルパスを生成）
         remote_files = {m.path_lower: m for m in dc.list_remote(self.dbx, self.remote_root)}
 
         # ローカルのファイルを全取得
@@ -198,14 +198,14 @@ class SyncEngine:
                 rp = dc.to_remote_path(lp, self.local_root, self.remote_root).lower()
                 local_files[rp] = lp
 
-        # リモートにあってローカルにない → ダウンロード
+        # リモートにあってローカルにない → ダウンロード（path_display で大文字小文字を保持）
         for rp, meta in remote_files.items():
-            lp = dc.to_local_path(rp, self.local_root, self.remote_root)
+            lp = dc.to_local_path(meta.path_display, self.local_root, self.remote_root)
             record = db.get_file(lp)
             if not os.path.exists(lp):
-                logger.info("初回DL: %s", rp)
-                dc.download(self.dbx, rp, lp)
-                db.upsert_file(lp, rp, db.file_hash(lp), meta.rev)
+                logger.info("初回DL: %s", meta.path_display)
+                dc.download(self.dbx, meta.path_display, lp)
+                db.upsert_file(lp, meta.path_display, db.file_hash(lp), meta.rev)
             elif not record or record["remote_rev"] != meta.rev:
                 self._do_upload(lp)
 
