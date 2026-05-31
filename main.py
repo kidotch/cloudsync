@@ -18,21 +18,53 @@ import state_db as db
 from auth import authenticate
 from sync_engine import SyncEngine
 
+
+def load_env_file(path: str | None = None) -> None:
+    """`.env` 形式の設定ファイルを os.environ に読み込む。
+
+    既存の環境変数は上書きしない（setdefault）ので、Linux の systemd で
+    EnvironmentFile から注入済みの場合はそれが優先される。
+    Windows には systemd が無いため、ここがメインの設定読み込み経路になる。
+
+    探索順: 引数 path → 環境変数 CLOUDSYNC_ENV → ~/.config/cloudsync/cloudsync.env
+    """
+    if path is None:
+        path = os.environ.get(
+            "CLOUDSYNC_ENV",
+            os.path.expanduser("~/.config/cloudsync/cloudsync.env"),
+        )
+    if not os.path.exists(path):
+        return
+    with open(path, encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, _, val = line.partition("=")
+            os.environ.setdefault(key.strip(), val.strip().strip('"').strip("'"))
+
+
 # ────────────────────────────────────────────
-# 設定（環境変数 or ここに直接書く）
+# 設定（環境変数 or ~/.config/cloudsync/cloudsync.env）
 # ────────────────────────────────────────────
+load_env_file()
 APP_KEY    = os.environ.get("DROPBOX_APP_KEY", "")
 APP_SECRET = os.environ.get("DROPBOX_APP_SECRET", "")
 LOCAL_ROOT = os.path.expanduser(os.environ.get("SYNC_LOCAL_ROOT", "~/sync-test"))
 REMOTE_ROOT = os.environ.get("SYNC_REMOTE_ROOT", "/sync-test")
 POLL_INTERVAL = int(os.environ.get("SYNC_POLL_SEC", "30"))
 
+CONFIG_DIR = os.path.expanduser("~/.config/cloudsync")
+LOG_FILE = os.path.join(CONFIG_DIR, "sync.log")
+
 # ────────────────────────────────────────────
+# 設定ディレクトリを先に作る（新規環境で FileHandler が import 時に落ちるのを防ぐ）
+os.makedirs(CONFIG_DIR, exist_ok=True)
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
     handlers=[
-        logging.FileHandler(os.path.expanduser("~/.config/cloudsync/sync.log")),
+        logging.FileHandler(LOG_FILE, encoding="utf-8"),
     ],
 )
 logger = logging.getLogger(__name__)

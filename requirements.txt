@@ -1,0 +1,2 @@
+dropbox>=11.36.0
+watchdog>=3.0.0
