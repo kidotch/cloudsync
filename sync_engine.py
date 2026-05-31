@@ -143,10 +143,12 @@ class SyncEngine:
             local_path = dc.to_local_path(entry.path_display, self.local_root, self.remote_root)
 
             if isinstance(entry, DeletedMetadata):
-                if os.path.exists(local_path):
+                # state_dbに記録があるファイルのみ削除（手動操作による誤削除を防ぐ）
+                record = db.get_file(local_path)
+                if record and os.path.exists(local_path):
                     logger.info("ローカル削除: %s", local_path)
                     os.remove(local_path)
-                db.delete_file(local_path)
+                    db.delete_file(local_path)
 
             elif isinstance(entry, FileMetadata):
                 record = db.get_file(local_path)
